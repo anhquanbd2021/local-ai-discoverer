@@ -1,0 +1,13 @@
+Analyze the code logic within the added directory context.
+Deduce all structural responsibilities, data rules, and functional limits.
+
+Open or create the file `TEST_CASES.md` in the repository root directory.
+Append a structured section tracking this specific folder:
+
+### 📂 Module: [Insert Directory Name Here]
+- Document discovered implicit functional behaviors.
+- Outline target verification strategies (Happy path scenarios and distinct edge cases).
+- Outline expected payload outputs, return codes, or fallback UI states.
+
+Do not overwrite existing content in TEST_CASES.md; only append the new findings at the end of the file.
+When the file save is complete, exit immediately.
