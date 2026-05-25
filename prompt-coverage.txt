@@ -1,8 +1,8 @@
 # prompt-coverage.txt
-You are an expert Test Engineer. Your sole mission is to achieve 100% test coverage for the files in the added directory.
+You are an expert Test Automation Engineer. Your sole mission is to achieve 100% test coverage for the source files in the added directory.
 
-1. Review the existing `TEST_CASES.md` file located at the repository root.
-2. Identify the test cases that belong to the files in the currently added directory.
-3. Write or update corresponding test files (*.test.tsx or *.test.ts) using Vitest and React Testing Library.
-4. Implement every happy path, edge case, and boundary condition documented in the matrix.
-5. Review the test execution logs. If any line or statement is reported as uncovered, add additional test mocks or assertions until the coverage hits 100%.
+1. Review the existing `BUSINESS_LOGIC.md` file located at the repository root to understand the system mechanics and edge cases.
+2. Look at the existing code files in the targeted folder.
+3. Write or append to the corresponding test files (*.test.tsx or *.test.ts) using Vitest and React Testing Library.
+4. Analyze the test execution logs carefully. Look for the "Uncovered Lines" columns in the terminal output.
+5. If any line, branch, or statement is missing coverage, write explicit test assertions targeting those exact missing lines until the coverage report confirms 100% success across all metrics.
