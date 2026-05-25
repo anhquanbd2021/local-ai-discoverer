@@ -98,14 +98,14 @@ targetDirectories.forEach((modulePath, index) => {
   console.log(`📦 [${index + 1}/${targetDirectories.length}] Processing folder domain: ${modulePath}`);
   console.log(`==================================================`);
 
-  let command = '';
+let command = '';
 
   if (!hasBusinessSpecs) {
-    // 🧠 DISCOVERY PHASE: Forces DeepSeek-R1 to analyze structures and write detailed specs/Mermaid diagrams
-    command = `aider --model ollama_chat/deepseek-r1:32b --editor-model ollama_chat/deepseek-r1:32b --file "${modulePath}" --message-file "${discoveryPrompt}" --no-stream`;
+    // 🧠 DISCOVERY PHASE: Added --yes-all to bypass file adding prompts seamlessly
+    command = `aider --model ollama_chat/deepseek-r1:32b --editor-model ollama_chat/deepseek-r1:32b --file "${modulePath}" --message-file "${discoveryPrompt}" --yes-all --auto-accept-architect --no-stream`;
   } else {
-    // 💻 COVERAGE PHASE: Forces Qwen2.5-Coder to convert markdown parameters into full unit test files
-    command = `aider --model ollama_chat/qwen2.5-coder:32b --editor-model ollama_chat/qwen2.5-coder:32b --read BUSINESS_LOGIC.md --file "${modulePath}" --message-file "${coveragePrompt}" --test-cmd "npm run test:coverage" --auto-test --no-stream`;
+    // 💻 COVERAGE PHASE: Added --yes-all to bypass file adding and runner logs confirmations
+    command = `aider --model ollama_chat/qwen2.5-coder:32b --editor-model ollama_chat/qwen2.5-coder:32b --read BUSINESS_LOGIC.md --file "${modulePath}" --message-file "${coveragePrompt}" --test-cmd "npm run test:coverage" --auto-test --yes-all --auto-accept-architect --no-stream`;
   }
 
   try {
