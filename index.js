@@ -64,14 +64,14 @@ targetDirectories.forEach((modulePath, index) => {
   console.log(`📦 [${index + 1}/${targetDirectories.length}] Processing folder: ${modulePath}`);
   console.log(`==================================================`);
 
-  let command = '';
+let command = '';
 
   if (!hasTestCasesFile) {
-    // 🧠 DISCOVERY: Only deepseek-r1 runs here to write markdown documentation
-    command = `aider --model ollama_chat/deepseek-r1:32b --file "${modulePath}" --message-file "${discoveryPrompt}" --no-stream`;
+    // 🧠 DISCOVERY MODE: Force both fields to use deepseek-r1:32b to avoid fallback switches
+    command = `aider --model ollama_chat/deepseek-r1:32b --editor-model ollama_chat/deepseek-r1:32b --file "${modulePath}" --message-file "${discoveryPrompt}" --no-stream`;
   } else {
-    // 💻 COVERAGE: Only qwen2.5-coder runs here to turn markdown into code files and execute them
-    command = `aider --model ollama_chat/qwen2.5-coder:32b --read TEST_CASES.md --file "${modulePath}" --message-file "${coveragePrompt}" --test-cmd "npm run test:coverage" --auto-test --no-stream`;
+    // 💻 COVERAGE MODE: Force both fields to use your desired qwen2.5-coder version explicitly
+    command = `aider --model ollama_chat/qwen2.5-coder:32b --editor-model ollama_chat/qwen2.5-coder:32b --read TEST_CASES.md --file "${modulePath}" --message-file "${coveragePrompt}" --test-cmd "npm run test:coverage" --auto-test --no-stream`;
   }
 
   try {
