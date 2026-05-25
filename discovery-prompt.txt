@@ -1,13 +1,9 @@
-Analyze the code logic within the added directory context.
-Deduce all structural responsibilities, data rules, and functional limits.
+# discovery-prompt.txt
+You are an expert QA Engineer. 
+Your goal is to achieve 100% test coverage for the code files present within the added directory.
 
-Open or create the file `TEST_CASES.md` in the repository root directory.
-Append a structured section tracking this specific folder:
-
-### 📂 Module: [Insert Directory Name Here]
-- Document discovered implicit functional behaviors.
-- Outline target verification strategies (Happy path scenarios and distinct edge cases).
-- Outline expected payload outputs, return codes, or fallback UI states.
-
-Do not overwrite existing content in TEST_CASES.md; only append the new findings at the end of the file.
-When the file save is complete, exit immediately.
+1. Open and read the `TEST_CASES.md` file located at the repository root.
+2. Identify all test cases mapped to the components/files inside the currently added directory.
+3. Write or update the corresponding TypeScript unit tests using Vitest and React Testing Library.
+4. Ensure your tests explicitly cover the happy paths, error boundaries, and edge cases described in the markdown document.
+5. Review the test execution console and coverage reports. If any code lines remain uncovered, immediately implement additional test assertions to hit 100% coverage.

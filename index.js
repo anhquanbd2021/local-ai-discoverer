@@ -4,15 +4,18 @@ const { execSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
-// The tool runs wherever the developer invokes it from in their terminal
 const projectRootDir = process.cwd(); 
 const promptFile = path.join(__dirname, 'discovery-prompt.txt');
+const testCasesFile = path.join(projectRootDir, 'TEST_CASES.md');
 
-// Operational Exclusion rules
-const BLACKLIST = new Set([
-  'node_modules', '.next', '.git', 'out', 'build', 'public', 'coverage', '.github'
-]);
-const VALID_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.jsx', '.py', '.go', '.rs']);
+// Ensure the blueprint document exists before booting the automated system loop
+if (!fs.existsSync(testCasesFile)) {
+  console.error('❌ Error: TEST_CASES.md not found in the root directory. Please generate it first.');
+  process.exit(1);
+}
+
+const BLACKLIST = new Set(['node_modules', '.next', '.git', 'out', 'build', 'public', 'coverage', '.github']);
+const VALID_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.jsx']);
 
 function scanForSourceDirectories(dir, dirList = new Set()) {
   const files = fs.readdirSync(dir);
@@ -21,7 +24,6 @@ function scanForSourceDirectories(dir, dirList = new Set()) {
 
   for (const file of files) {
     const fullPath = path.join(dir, file);
-
     if (BLACKLIST.has(file)) continue;
 
     const stat = fs.statSync(fullPath);
@@ -29,9 +31,7 @@ function scanForSourceDirectories(dir, dirList = new Set()) {
       subDirs.push(fullPath);
     } else if (stat.isFile()) {
       const ext = path.extname(file).toLowerCase();
-      if (VALID_EXTENSIONS.has(ext)) {
-        containsSourceFiles = true;
-      }
+      if (VALID_EXTENSIONS.has(ext)) containsSourceFiles = true;
     }
   }
 
@@ -46,33 +46,27 @@ function scanForSourceDirectories(dir, dirList = new Set()) {
   return Array.from(dirList);
 }
 
-// Force the baseline address fallback environment variable
 process.env.OLLAMA_API_BASE = process.env.OLLAMA_API_BASE || 'http://127.0.0.1:11434';
 
-console.log('🔍 [Local AI Discoverer] Scanning target workspace map structure...');
+console.log('🔍 [Local AI Test Runner] Scanning workspace maps for coverage targets...');
 const targetDirectories = scanForSourceDirectories(projectRootDir);
 
-if (targetDirectories.length === 0) {
-  console.log('❌ No valid code elements discovered. Shutting down pipeline.');
-  process.exit(0);
-}
-
-console.log(`\n🚀 Discovered ${targetDirectories.length} interactive modules. Initializing sequential loop:`);
-targetDirectories.forEach(d => console.log(`  - ${d}`));
-
 targetDirectories.forEach((modulePath, index) => {
-  console.log(`\n--------------------------------------------------`);
-  console.log(`📦 [${index + 1}/${targetDirectories.length}] Processing module directory context: ${modulePath}`);
-  console.log(`--------------------------------------------------`);
+  console.log(`\n==================================================`);
+  console.log(`🧪 [${index + 1}/${targetDirectories.length}] Testing Module: ${modulePath}`);
+  console.log(`==================================================`);
 
-  const command = `aider --file "${modulePath}" --message-file "${promptFile}" --no-stream`;
+  // --read flags mount the file as read-only context (prevents the AI from corrupting your blueprint)
+  // --test-cmd binds the code coverage reporter script to Aider's evaluation loop
+  // --auto-test forces Aider to automatically re-run the script if coverage fails or errors out
+  const command = `aider --read TEST_CASES.md --file "${modulePath}" --message-file "${promptFile}" --test-cmd "npm run test:coverage" --auto-test --no-stream`;
 
   try {
     execSync(command, { cwd: projectRootDir, stdio: 'inherit' });
-    console.log(`\n✅ Completed mapping append processing for: ${modulePath}`);
+    console.log(`\n✅ Completed test generation & 100% coverage check for: ${modulePath}`);
   } catch (error) {
-    console.error(`❌ Interrupted processing block exception on folder "${modulePath}":`, error.message);
+    console.error(`❌ Coverage execution loop interrupted on directory folder "${modulePath}":`, error.message);
   }
 });
 
-console.log('\n🎉 Pipeline loop process terminal trace complete. Review the outputs inside TEST_CASES.md');
+console.log('\n🎉 Test and coverage tracking loop completed across all codebase folders.');
