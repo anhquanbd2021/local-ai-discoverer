@@ -5,16 +5,21 @@ const path = require('path');
 const fs = require('fs');
 
 const projectRootDir = process.cwd(); 
-const promptFile = path.join(__dirname, 'discovery-prompt.txt');
 const testCasesFile = path.join(projectRootDir, 'TEST_CASES.md');
 
-// 🛠️ DYNAMIC MODE DETECTION
+// Check mode setting
 const hasTestCasesFile = fs.existsSync(testCasesFile);
 
+// 🛠️ Dynamic file mapping based on mode
+const discoveryPrompt = path.join(__dirname, 'prompt-discovery.txt');
+const coveragePrompt = path.join(__dirname, 'prompt-coverage.txt');
+
 if (!hasTestCasesFile) {
-  console.log('📝 [Local AI] TEST_CASES.md not found. Running in DISCOVERY MODE to map your legacy code...\n');
+  console.log('📝 [MODE: DISCOVERY] TEST_CASES.md not found.');
+  console.log('🤖 Target Model: deepseek-r1:32b -> Analyzing legacy behavior...\n');
 } else {
-  console.log('🧪 [Local AI] TEST_CASES.md found! Running in TEST GENERATION & 100% COVERAGE MODE...\n');
+  console.log('🧪 [MODE: COVERAGE] TEST_CASES.md found!');
+  console.log('🤖 Target Model: qwen2.5-coder:32b -> Generating tests to hit 100% coverage...\n');
 }
 
 const BLACKLIST = new Set(['node_modules', '.next', '.git', 'out', 'build', 'public', 'coverage', '.github']);
@@ -51,33 +56,30 @@ function scanForSourceDirectories(dir, dirList = new Set()) {
 
 process.env.OLLAMA_API_BASE = process.env.OLLAMA_API_BASE || 'http://127.0.0.1:11434';
 
-console.log('🔍 Scanning workspace modules...');
+console.log('🔍 Indexing project directory tree maps...');
 const targetDirectories = scanForSourceDirectories(projectRootDir);
 
 targetDirectories.forEach((modulePath, index) => {
   console.log(`\n==================================================`);
-  console.log(`📦 [${index + 1}/${targetDirectories.length}] Processing: ${modulePath}`);
+  console.log(`📦 [${index + 1}/${targetDirectories.length}] Processing folder: ${modulePath}`);
   console.log(`==================================================`);
 
   let command = '';
 
   if (!hasTestCasesFile) {
-    // DISCOVERY MODE COMMAND: Scan code and write out the markdown matrix file
-    command = `aider --file "${modulePath}" --message-file "${promptFile}" --no-stream`;
+    // 🧠 DISCOVERY: Only deepseek-r1 runs here to write markdown documentation
+    command = `aider --model ollama_chat/deepseek-r1:32b --file "${modulePath}" --message-file "${discoveryPrompt}" --no-stream`;
   } else {
-    // COVERAGE MODE COMMAND: Read existing markdown matrix, write tests, target 100% coverage
-    command = `aider --read TEST_CASES.md --file "${modulePath}" --message-file "${promptFile}" --test-cmd "npm run test:coverage" --auto-test --no-stream`;
+    // 💻 COVERAGE: Only qwen2.5-coder runs here to turn markdown into code files and execute them
+    command = `aider --model ollama_chat/qwen2.5-coder:32b --read TEST_CASES.md --file "${modulePath}" --message-file "${coveragePrompt}" --test-cmd "npm run test:coverage" --auto-test --no-stream`;
   }
 
   try {
     execSync(command, { cwd: projectRootDir, stdio: 'inherit' });
-    console.log(`\n✅ Finished step for: ${modulePath}`);
+    console.log(`\n✅ Section complete for module: ${modulePath}`);
   } catch (error) {
-    console.error(`❌ Interrupted processing block exception on folder "${modulePath}":`, error.message);
+    console.error(`❌ Interrupted execution block exception on folder "${modulePath}":`, error.message);
   }
 });
 
-console.log('\n🎉 Pipeline run complete!');
-if (!hasTestCasesFile) {
-  console.log('👉 Next Step: Review your brand new TEST_CASES.md, then run `npm run local-ai:discover` again to write the tests!');
-}
+console.log('\n🎉 Execution engine completed processing all project modules!');

@@ -1,0 +1,13 @@
+# prompt-discovery.txt
+Analyze the structural code logic and layout rules in the added directory.
+Deduce the implicit business rules, functional mechanics, and failure modes.
+
+Open or create the file `TEST_CASES.md` at the repository root.
+Using DeepSeek's deep analytical planning, append a new section for this module:
+
+### 📂 Module: [Insert Directory Name]
+- Document discovered implicit functional behaviors.
+- Define explicit test cases (Happy paths and distinct edge cases).
+- Outline expected states, return payloads, or error parameters.
+
+Do not write or edit any JavaScript/TypeScript application or test files. Only write markdown to TEST_CASES.md.
