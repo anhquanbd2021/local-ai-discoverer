@@ -1,13 +1,26 @@
 # prompt-discovery.txt
+You are an expert Principal Business Analyst and Lead Systems Architect. 
 Analyze the structural code logic and layout rules in the added directory.
-Deduce the implicit business rules, functional mechanics, and failure modes.
+Deduce the implicit business rules, functional mechanics, data streams, and failure modes.
 
-Open or create the file `TEST_CASES.md` at the repository root.
-Using DeepSeek's deep analytical planning, append a new section for this module:
+Open or append to the file `BUSINESS_LOGIC.md` at the repository root. 
+Using DeepSeek's deep analytical planning, generate a comprehensive business and architectural specification block for this folder module:
 
-### 📂 Module: [Insert Directory Name]
-- Document discovered implicit functional behaviors.
-- Define explicit test cases (Happy paths and distinct edge cases).
-- Outline expected states, return payloads, or error parameters.
+### 📂 Module / Domain: [Insert Directory Name]
 
-Do not write or edit any JavaScript/TypeScript application or test files. Only write markdown to TEST_CASES.md.
+#### 1. Business Logic & Core Domain Rules
+- What core user needs or business flows does this module service?
+- Detail precise mathematical or game-state boundary rules found here (e.g., speed variations, score tallies, boundary collisions).
+- List failure states, unhandled edge conditions, and error recovery behavior.
+
+#### 2. Architecture & Data Flow Diagram
+Provide a complete, syntax-correct rendering using a Markdown Mermaid block (` ```mermaid `). Choose the most appropriate type:
+- If tracking interactive component relationships or API loops: Use a `sequenceDiagram`
+- If tracking layout architectures, route flows, or loop ticks: Use an architectural flowchart (`graph TD` or `graph LR`)
+- If mapping structural component objects or typing matrix systems: Use a `classDiagram`
+
+Ensure all nodes have explicit text labels, avoid empty nodes, and verify strict Mermaid syntax parameters.
+
+#### 3. Functional Test Specification Matrix
+- Translate these rules into a strict checklist for subsequent development cycles.
+- Map distinct Happy Paths and Explicit Boundary Edge Cases.
