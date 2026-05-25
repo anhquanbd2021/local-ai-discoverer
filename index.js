@@ -67,8 +67,10 @@ function scanForSourceDirectories(dir, dirList = new Set()) {
     }
   }
 
-  if (containsSourceFiles) {
-    dirList.add(path.relative(projectRootDir, dir));
+  // Only append paths that are actual child directories, skipping the blank root string
+  const relativePath = path.relative(projectRootDir, dir);
+  if (containsSourceFiles && relativePath !== "") {
+    dirList.add(relativePath);
   }
 
   for (const subDir of subDirs) {
@@ -98,14 +100,14 @@ targetDirectories.forEach((modulePath, index) => {
   console.log(`📦 [${index + 1}/${targetDirectories.length}] Processing folder domain: ${modulePath}`);
   console.log(`==================================================`);
 
-let command = '';
+  let command = '';
 
   if (!hasBusinessSpecs) {
-    // 🧠 DISCOVERY PHASE: Added --yes-all to bypass file adding prompts seamlessly
-    command = `aider --model ollama_chat/deepseek-r1:32b --editor-model ollama_chat/deepseek-r1:32b --file "${modulePath}" --message-file "${discoveryPrompt}" --yes-all --auto-accept-architect --no-stream`;
+    // 🧠 DISCOVERY PHASE: Uses --yes-always to completely bypass user approval prompts
+    command = `aider --model ollama_chat/deepseek-r1:32b --editor-model ollama_chat/deepseek-r1:32b --file "${modulePath}" --message-file "${discoveryPrompt}" --yes-always --auto-accept-architect --no-stream`;
   } else {
-    // 💻 COVERAGE PHASE: Added --yes-all to bypass file adding and runner logs confirmations
-    command = `aider --model ollama_chat/qwen2.5-coder:32b --editor-model ollama_chat/qwen2.5-coder:32b --read BUSINESS_LOGIC.md --file "${modulePath}" --message-file "${coveragePrompt}" --test-cmd "npm run test:coverage" --auto-test --yes-all --auto-accept-architect --no-stream`;
+    // 💻 COVERAGE PHASE: Standardizes flags across test runner execution phases
+    command = `aider --model ollama_chat/qwen2.5-coder:32b --editor-model ollama_chat/qwen2.5-coder:32b --read BUSINESS_LOGIC.md --file "${modulePath}" --message-file "${coveragePrompt}" --test-cmd "npm run test:coverage" --auto-test --yes-always --auto-accept-architect --no-stream`;
   }
 
   try {
