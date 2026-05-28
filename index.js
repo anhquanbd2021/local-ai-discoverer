@@ -81,6 +81,8 @@ function scanForSourceDirectories(dir, dirList = new Set()) {
 }
 
 // Standardize the host loop configuration address backup fallback
+// Hardcode your local server IP address directly into the environment pool
+process.env.OLLAMA_API_BASE = 'http://192.168.10.17:11434';
 process.env.OLLAMA_API_BASE = process.env.OLLAMA_API_BASE || 'http://127.0.0.1:11434';
 
 console.log('🔍 Indexing project structural layout map trees...');
