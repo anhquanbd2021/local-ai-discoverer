@@ -80,47 +80,104 @@ function scanForSourceDirectories(dir, dirList = new Set()) {
   return Array.from(dirList);
 }
 
-// 🌐 EXPLICIT NETWORK ROUTING: Forces Node and Aider to talk directly to your server machine
-process.env.OLLAMA_API_BASE = 'http://192.168.1.23:11434';
+// 🌐 EXPLICIT NETWORK ROUTING: Use existing OLLAMA_API_BASE if provided,
+// otherwise fall back to the local test host used previously.
+process.env.OLLAMA_API_BASE = process.env.OLLAMA_API_BASE || 'http://192.168.1.23:11434';
+console.log(`🔗 Using OLLAMA_API_BASE=${process.env.OLLAMA_API_BASE}`);
+const { URL } = require('url');
+const http = require('http');
+const https = require('https');
 
-console.log('🔍 Indexing project structural layout map trees...');
-const targetDirectories = scanForSourceDirectories(projectRootDir);
+function checkOllamaReachable(base, timeoutMs = 5000) {
+  return new Promise((resolve, reject) => {
+    try {
+      const u = new URL(base);
+      const lib = u.protocol === 'https:' ? https : http;
+      const options = {
+        hostname: u.hostname,
+        port: u.port || (u.protocol === 'https:' ? 443 : 80),
+        path: '/models',
+        method: 'GET',
+        timeout: timeoutMs
+      };
 
-if (targetDirectories.length === 0) {
-  console.log('❌ No valid source code folders discovered. Exiting.');
-  process.exit(0);
+      const req = lib.request(options, (res) => {
+        // treat any 2xx as success
+        const ok = res.statusCode >= 200 && res.statusCode < 300;
+        res.resume();
+        resolve(ok);
+      });
+
+      req.on('timeout', () => {
+        req.destroy(new Error('timeout'));
+      });
+      req.on('error', (err) => {
+        reject(err);
+      });
+      req.end();
+    } catch (e) {
+      reject(e);
+    }
+  });
 }
 
-console.log(`🚀 Processing sequence initialized for ${targetDirectories.length} detected modules:`);
-targetDirectories.forEach(d => console.log(`  - ${d}`));
-
-// Run the sequential agent loop processing sequence across target blocks
-targetDirectories.forEach((modulePath, index) => {
-  console.log(`\n==================================================`);
-  console.log(`📦 [${index + 1}/${targetDirectories.length}] Processing folder domain: ${modulePath}`);
-  console.log(`==================================================`);
-
-  let command = '';
-
-  if (!hasBusinessSpecs) {
-    // 🧠 DISCOVERY PHASE: Uses --yes-always to completely bypass user approval prompts
-    command = `aider --model ollama_chat/deepseek-r1:32b --editor-model ollama_chat/deepseek-r1:32b --file "${modulePath}" --message-file "${discoveryPrompt}" --yes-always --auto-accept-architect --no-stream`;
-  } else {
-    // 💻 COVERAGE PHASE: Standardizes flags across test runner execution phases
-    command = `aider --model ollama_chat/qwen2.5-coder:32b --editor-model ollama_chat/qwen2.5-coder:32b --read BUSINESS_LOGIC.md --file "${modulePath}" --message-file "${coveragePrompt}" --test-cmd "npm run test:coverage" --auto-test --yes-always --auto-accept-architect --no-stream`;
-  }
+(async () => {
+  console.log('🔍 Indexing project structural layout map trees...');
 
   try {
-    // Execute command synchronously and pipe standard I/O into your active terminal window
-    execSync(command, { cwd: projectRootDir, stdio: 'inherit' });
-    console.log(`\n✅ Section complete for module block: ${modulePath}`);
-  } catch (error) {
-    console.error(`❌ Interrupted processing context exception on folder "${modulePath}":`, error.message);
+    const base = process.env.OLLAMA_API_BASE;
+    const reachable = await checkOllamaReachable(base, 10000);
+    if (!reachable) {
+      console.error(`❌ Ollama API at ${base} responded with non-2xx status or refused connection.`);
+      console.error('   Confirm the server is running and that the `models` endpoint is reachable.');
+      process.exit(1);
+    }
+    console.log(`✅ Ollama API reachable at ${base}`);
+  } catch (err) {
+    console.error(`❌ Failed to connect to Ollama API at ${process.env.OLLAMA_API_BASE}:`, err.message);
+    console.error('   Check that the service is running and not blocked by a firewall.');
+    process.exit(1);
   }
-});
 
-console.log('\n🎉 [Local AI Pipeline Engine] Execution loop successfully finished processing!');
-if (!hasBusinessSpecs) {
-  console.log('👉 Next Step: Review your brand new BUSINESS_LOGIC.md file.');
-  console.log('   Once satisfied, run this command again to trigger 100% test coverage generation via Qwen!');
-}
+  const targetDirectories = scanForSourceDirectories(projectRootDir);
+
+  if (targetDirectories.length === 0) {
+    console.log('❌ No valid source code folders discovered. Exiting.');
+    process.exit(0);
+  }
+
+  console.log(`🚀 Processing sequence initialized for ${targetDirectories.length} detected modules:`);
+  targetDirectories.forEach(d => console.log(`  - ${d}`));
+
+  // Run the sequential agent loop processing sequence across target blocks
+  targetDirectories.forEach((modulePath, index) => {
+    console.log(`\n==================================================`);
+    console.log(`📦 [${index + 1}/${targetDirectories.length}] Processing folder domain: ${modulePath}`);
+    console.log(`==================================================`);
+
+    let command = '';
+
+    if (!hasBusinessSpecs) {
+      // 🧠 DISCOVERY PHASE: Uses --yes-always to completely bypass user approval prompts
+      command = `aider --model ollama_chat/deepseek-r1:32b --editor-model ollama_chat/deepseek-r1:32b --file "${modulePath}" --message-file "${discoveryPrompt}" --yes-always --auto-accept-architect --no-stream`;
+    } else {
+      // 💻 COVERAGE PHASE: Standardizes flags across test runner execution phases
+      command = `aider --model ollama_chat/qwen2.5-coder:32b --editor-model ollama_chat/qwen2.5-coder:32b --read BUSINESS_LOGIC.md --file "${modulePath}" --message-file "${coveragePrompt}" --test-cmd "npm run test:coverage" --auto-test --yes-always --auto-accept-architect --no-stream`;
+    }
+
+    try {
+      // Execute command synchronously and pipe standard I/O into your active terminal window
+      execSync(command, { cwd: projectRootDir, stdio: 'inherit' });
+      console.log(`\n✅ Section complete for module block: ${modulePath}`);
+    } catch (error) {
+      console.error(`❌ Interrupted processing context exception on folder "${modulePath}":`, error.message);
+    }
+  });
+
+  console.log('\n🎉 [Local AI Pipeline Engine] Execution loop successfully finished processing!');
+  if (!hasBusinessSpecs) {
+    console.log('👉 Next Step: Review your brand new BUSINESS_LOGIC.md file.');
+    console.log('   Once satisfied, run this command again to trigger 100% test coverage generation via Qwen!');
+  }
+
+})();
