@@ -89,35 +89,47 @@ const http = require('http');
 const https = require('https');
 
 function checkOllamaReachable(base, timeoutMs = 5000) {
-  return new Promise((resolve, reject) => {
-    try {
-      const u = new URL(base);
-      const lib = u.protocol === 'https:' ? https : http;
-      const options = {
-        hostname: u.hostname,
-        port: u.port || (u.protocol === 'https:' ? 443 : 80),
-        path: '/models',
-        method: 'GET',
-        timeout: timeoutMs
-      };
+  // Try multiple common API paths and treat any 2xx response as success.
+  const pathsToTry = ['/models', '/v1/models', '/api/models', '/'];
+  return new Promise(async (resolve, reject) => {
+    let lastError = null;
+    for (const p of pathsToTry) {
+      try {
+        const u = new URL(base);
+        u.pathname = p;
+        const lib = u.protocol === 'https:' ? https : http;
+        const options = {
+          hostname: u.hostname,
+          port: u.port || (u.protocol === 'https:' ? 443 : 80),
+          path: u.pathname,
+          method: 'GET',
+          timeout: timeoutMs
+        };
 
-      const req = lib.request(options, (res) => {
-        // treat any 2xx as success
-        const ok = res.statusCode >= 200 && res.statusCode < 300;
-        res.resume();
-        resolve(ok);
-      });
+        const ok = await new Promise((res, rej) => {
+          const req = lib.request(options, (response) => {
+            const status = response.statusCode;
+            // Accept any 2xx as success. Also accept 200 on root '/' as indicator.
+            if (status >= 200 && status < 300) {
+              response.resume();
+              return res({ ok: true, path: p, status });
+            }
+            response.resume();
+            return res({ ok: false, path: p, status });
+          });
+          req.on('timeout', () => req.destroy(new Error('timeout')));
+          req.on('error', (err) => rej(err));
+          req.end();
+        });
 
-      req.on('timeout', () => {
-        req.destroy(new Error('timeout'));
-      });
-      req.on('error', (err) => {
-        reject(err);
-      });
-      req.end();
-    } catch (e) {
-      reject(e);
+        if (ok && ok.ok) return resolve(ok);
+        // record last non-2xx status
+        lastError = new Error(`non-2xx (${ok.status}) on ${p}`);
+      } catch (e) {
+        lastError = e;
+      }
     }
+    reject(lastError || new Error('no paths succeeded'));
   });
 }
 
