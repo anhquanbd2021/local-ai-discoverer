@@ -24,7 +24,7 @@ if (!hasBusinessSpecs) {
   console.log('🤖 Target Model: deepseek-r1-gpu -> Analyzing behavior & rendering diagrams...\n');
 } else {
   console.log('🧪 [MODE: COVERAGE] BUSINESS_LOGIC.md found!');
-  console.log('🤖 Target Model: qwen2.5-coder-gpu -> Generating tests to hit 100% coverage...\n');
+  console.log('🤖 Target Model: qwen2.5-coder-14b-gpu -> Generating tests to hit 100% coverage...\n');
 }
 
 // Global directories to explicitly ignore during the file scanner sequence
@@ -104,10 +104,10 @@ targetDirectories.forEach((modulePath, index) => {
 
   if (!hasBusinessSpecs) {
     // 🧠 DISCOVERY PHASE: Uses --yes-always to completely bypass user approval prompts
-    command = `aider --model ollama_chat/deepseek-r1-gpu --editor-model ollama_chat/deepseek-r1-gpu --file "${modulePath}" --message-file "${discoveryPrompt}" --yes-always --auto-accept-architect --no-stream`;
+    command = `aider --model ollama_chat/deepseek-r1-gpu --editor-model ollama_chat/deepseek-r1-gpu --file "${modulePath}" --message-file "${discoveryPrompt}" --yes-always --auto-accept-architect --stream`;
   } else {
-    // 💻 COVERAGE PHASE: Standardizes flags across test runner execution phases
-    command = `aider --model ollama_chat/qwen2.5-coder-gpu --editor-model ollama_chat/qwen2.5-coder-gpu --read BUSINESS_LOGIC.md --file "${modulePath}" --message-file "${coveragePrompt}" --test-cmd "npm run test:coverage" --auto-test --yes-always --auto-accept-architect --no-stream`;
+    // 💻 COVERAGE PHASE: Run standard pipeline swapped to the faster 14B GPU model
+    command = `aider --model ollama_chat/qwen2.5-coder-14b-gpu --editor-model ollama_chat/qwen2.5-coder-14b-gpu --read BUSINESS_LOGIC.md --file "${modulePath}" --message-file "${coveragePrompt}" --test-cmd "npm run test:coverage" --auto-test --yes-always --auto-accept-architect --stream`;
   }
 
   try {
