@@ -81,7 +81,7 @@ function scanForSourceDirectories(dir, dirList = new Set()) {
 }
 
 // 🌐 EXPLICIT NETWORK ROUTING: Forces Node and Aider to talk directly to your server machine
-process.env.OLLAMA_API_BASE = 'http://192.168.10.17:11434';
+process.env.OLLAMA_API_BASE = 'http://192.168.1.23:11434';
 
 console.log('🔍 Indexing project structural layout map trees...');
 const targetDirectories = scanForSourceDirectories(projectRootDir);
