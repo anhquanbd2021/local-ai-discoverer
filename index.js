@@ -125,13 +125,45 @@ function checkOllamaReachable(base, timeoutMs = 5000) {
   console.log('🔍 Indexing project structural layout map trees...');
 
   try {
-    const base = process.env.OLLAMA_API_BASE;
-    const reachable = await checkOllamaReachable(base, 10000);
+    const baseEnv = process.env.OLLAMA_API_BASE;
+    let base = baseEnv;
+    let reachable = false;
+    try {
+      reachable = await checkOllamaReachable(base, 10000);
+    } catch (_) {
+      reachable = false;
+    }
+
+    // If configured host is not reachable, try localhost fallback (127.0.0.1)
     if (!reachable) {
-      console.error(`❌ Ollama API at ${base} responded with non-2xx status or refused connection.`);
+      try {
+        const u = new URL(baseEnv);
+        const hostIsLocal = u.hostname === '127.0.0.1' || u.hostname === 'localhost';
+        if (!hostIsLocal) {
+          const localhostBase = `${u.protocol}//127.0.0.1:${u.port || (u.protocol === 'https:' ? 443 : 80)}`;
+          console.log(`🔁 Attempting fallback to ${localhostBase} (server may be bound to loopback)`);
+          try {
+            reachable = await checkOllamaReachable(localhostBase, 5000);
+            if (reachable) {
+              process.env.OLLAMA_API_BASE = localhostBase;
+              base = localhostBase;
+              console.log(`✅ Fallback succeeded — now using OLLAMA_API_BASE=${process.env.OLLAMA_API_BASE}`);
+            }
+          } catch (_) {
+            reachable = false;
+          }
+        }
+      } catch (e) {
+        // ignore URL parse errors and continue to fail below
+      }
+    }
+
+    if (!reachable) {
+      console.error(`❌ Ollama API at ${baseEnv} responded with non-2xx status or refused connection.`);
       console.error('   Confirm the server is running and that the `models` endpoint is reachable.');
       process.exit(1);
     }
+
     console.log(`✅ Ollama API reachable at ${base}`);
   } catch (err) {
     console.error(`❌ Failed to connect to Ollama API at ${process.env.OLLAMA_API_BASE}:`, err.message);
