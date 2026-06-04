@@ -21,10 +21,10 @@ const coveragePrompt = path.join(__dirname, 'prompt-coverage.txt');
 
 if (!hasBusinessSpecs) {
   console.log('📝 [MODE: DISCOVERY] BUSINESS_LOGIC.md not found.');
-  console.log('🤖 Target Model: deepseek-r1:32b -> Analyzing behavior & rendering diagrams...\n');
+  console.log('🤖 Target Model: deepseek-r1-gpu -> Analyzing behavior & rendering diagrams...\n');
 } else {
   console.log('🧪 [MODE: COVERAGE] BUSINESS_LOGIC.md found!');
-  console.log('🤖 Target Model: qwen2.5-coder:32b -> Generating tests to hit 100% coverage...\n');
+  console.log('🤖 Target Model: qwen2.5-coder-gpu -> Generating tests to hit 100% coverage...\n');
 }
 
 // Global directories to explicitly ignore during the file scanner sequence
@@ -104,10 +104,10 @@ targetDirectories.forEach((modulePath, index) => {
 
   if (!hasBusinessSpecs) {
     // 🧠 DISCOVERY PHASE: Uses --yes-always to completely bypass user approval prompts
-    command = `aider --model ollama_chat/deepseek-r1:32b --editor-model ollama_chat/deepseek-r1:32b --file "${modulePath}" --message-file "${discoveryPrompt}" --yes-always --auto-accept-architect --no-stream`;
+    command = `aider --model ollama_chat/deepseek-r1-gpu --editor-model ollama_chat/deepseek-r1-gpu --file "${modulePath}" --message-file "${discoveryPrompt}" --yes-always --auto-accept-architect --no-stream`;
   } else {
     // 💻 COVERAGE PHASE: Standardizes flags across test runner execution phases
-    command = `aider --model ollama_chat/qwen2.5-coder:32b --editor-model ollama_chat/qwen2.5-coder:32b --read BUSINESS_LOGIC.md --file "${modulePath}" --message-file "${coveragePrompt}" --test-cmd "npm run test:coverage" --auto-test --yes-always --auto-accept-architect --no-stream`;
+    command = `aider --model ollama_chat/qwen2.5-coder-gpu --editor-model ollama_chat/qwen2.5-coder-gpu --read BUSINESS_LOGIC.md --file "${modulePath}" --message-file "${coveragePrompt}" --test-cmd "npm run test:coverage" --auto-test --yes-always --auto-accept-architect --no-stream`;
   }
 
   try {
