@@ -2,32 +2,18 @@
 
 /**
  * Local AI Codebase Discoverer & Test Coverage Automator
- * Powered by local Ollama engine setups using Aider.
+ * Powered by Ollama engine setups using Aider.
  */
 
 const { execSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
-const projectRootDir = process.cwd(); 
-// The master specification file that tracks business requirements and diagrams
+// Configuration constants
+const projectRootDir = process.cwd();
 const businessLogicFile = path.join(projectRootDir, 'BUSINESS_LOGIC.md');
-
-// 🛠️ Dynamic Mode Auto-Detection
-const hasBusinessSpecs = fs.existsSync(businessLogicFile);
-
 const discoveryPrompt = path.join(__dirname, 'prompt-discovery.txt');
 const coveragePrompt = path.join(__dirname, 'prompt-coverage.txt');
-
-if (!hasBusinessSpecs) {
-  console.log('📝 [MODE: DISCOVERY] BUSINESS_LOGIC.md not found.');
-  console.log('🤖 Target Model: deepseek-r1-gpu -> Analyzing behavior & rendering diagrams...\n');
-} else {
-  console.log('🧪 [MODE: COVERAGE] BUSINESS_LOGIC.md found!');
-  console.log('🤖 Target Model: qwen2.5-coder-14b-gpu -> Generating tests to hit 100% coverage...\n');
-}
-
-// Global directories to explicitly ignore during the file scanner sequence
 const BLACKLIST = new Set([
   'node_modules',
   '.next',
@@ -39,13 +25,27 @@ const BLACKLIST = new Set([
   '.github',
   'dist'
 ]);
-
-// Source extensions we want to map context from
 const VALID_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.jsx']);
 
+// Configure model options based on available Ollama models
+const discoveryOptions = {
+  model: process.env.DISCOVERY_MODEL || 'ollama_chat/deepseek-r1-gpu',
+  editorModel: process.env.DISCOVERY_EDITOR_MODEL || 'ollama_chat/deepseek-r1-gpu'
+};
+
+const coverageOptions = {
+  model: process.env.COVERAGE_MODEL || 'ollama_chat/qwen2.5-coder-14b-gpu',
+  editorModel: process.env.COVERAGE_EDITOR_MODEL || 'ollama_chat/qwen2.5-coder-14b-gpu',
+  testCmd: "npm run test:coverage",
+  readFiles: ["BUSINESS_LOGIC.md"],
+  messageFile: coveragePrompt
+};
+
+// Global settings for parallel processing and error handling
+const CONCURRENCY_LIMIT = process.env.CONCURRENCY_LIMIT ? parseInt(process.env.CONCURRENCY_LIMIT) : 5;
+
 /**
- * Recursively inspects the host repository tree to pinpoint 
- * deep leaf directories actively containing source code elements.
+ * Recursively inspects the repository to find source code directories.
  */
 function scanForSourceDirectories(dir, dirList = new Set()) {
   const files = fs.readdirSync(dir);
@@ -67,7 +67,6 @@ function scanForSourceDirectories(dir, dirList = new Set()) {
     }
   }
 
-  // Only append paths that are actual child directories, skipping the blank root string
   const relativePath = path.relative(projectRootDir, dir);
   if (containsSourceFiles && relativePath !== "") {
     dirList.add(relativePath);
@@ -80,7 +79,7 @@ function scanForSourceDirectories(dir, dirList = new Set()) {
   return Array.from(dirList);
 }
 
-// 🌐 EXPLICIT NETWORK ROUTING: Forces Node and Aider to talk directly to your server machine
+// Set Ollama API endpoint
 process.env.OLLAMA_API_BASE = 'http://192.168.1.23:11434';
 
 console.log('🔍 Indexing project structural layout map trees...');
@@ -91,33 +90,86 @@ if (targetDirectories.length === 0) {
   process.exit(0);
 }
 
-console.log(`🚀 Processing sequence initialized for ${targetDirectories.length} detected modules:`);
-targetDirectories.forEach(d => console.log(`  - ${d}`));
+// Initialize logging with timestamp
+function getCurrentTime() {
+  return new Date().toLocaleTimeString();
+}
 
-// Run the sequential agent loop processing sequence across target blocks
-targetDirectories.forEach((modulePath, index) => {
-  console.log(`\n==================================================`);
-  console.log(`📦 [${index + 1}/${targetDirectories.length}] Processing folder domain: ${modulePath}`);
-  console.log(`==================================================`);
+console.log(`[${getCurrentTime()}] 🚀 Processing sequence initialized for ${targetDirectories.length} detected modules:`);
 
-  let command = '';
-
-  if (!hasBusinessSpecs) {
-    // 🧠 DISCOVERY PHASE: Uses --yes-always to completely bypass user approval prompts
-    command = `aider --model ollama_chat/deepseek-r1-gpu --editor-model ollama_chat/deepseek-r1-gpu --file "${modulePath}" --message-file "${discoveryPrompt}" --yes-always --auto-accept-architect --stream`;
-  } else {
-    // 💻 COVERAGE PHASE: Run standard pipeline swapped to the faster 14B GPU model
-    command = `aider --model ollama_chat/qwen2.5-coder-14b-gpu --editor-model ollama_chat/qwen2.5-coder-14b-gpu --read BUSINESS_LOGIC.md --file "${modulePath}" --message-file "${coveragePrompt}" --test-cmd "npm run test:coverage" --auto-test --yes-always --auto-accept-architect --stream`;
-  }
-
+/**
+ * Processes a module asynchronously with retries.
+ */
+async function processModuleWithRetries(modulePath, options, retries = 3) {
   try {
-    // Execute command synchronously and pipe standard I/O into your active terminal window
+    const command = `aider 
+      --model ${options.model}
+      --editor-model ${options.editorModel}
+      --file "${modulePath}"
+      --message-file "${options.messageFile}"
+      ${options.testCmd ? `--test-cmd "${options.testCmd}"` : ''}
+      ${options.readFiles?.map(f => `--read ${f}`).join(' ') || ''}
+      --auto-test
+      --yes-always
+      --auto-accept-architect
+      --stream`;
+
     execSync(command, { cwd: projectRootDir, stdio: 'inherit' });
-    console.log(`\n✅ Section complete for module block: ${modulePath}`);
+    return `✅ Completed processing for module block: ${modulePath}`;
   } catch (error) {
-    console.error(`❌ Interrupted processing context exception on folder "${modulePath}":`, error.message);
+    if (retries > 0 && error.message.includes('transient')) {
+      console.log(`[${getCurrentTime()}] 🔄 Retrying ${modulePath}... Remaining attempts: ${retries}`);
+      return processModuleWithRetries(modulePath, options, retries - 1);
+    }
+    throw new Error(`❌ Error processing "${modulePath}": ${error.message}`);
   }
-});
+}
+
+/**
+ * Processes modules in parallel with concurrency control.
+ */
+async function processQueue() {
+  const tasks = targetDirectories.map((modulePath, index) => {
+    return () => {
+      console.log(`\n==================================================`);
+      console.log(`[${getCurrentTime()}] 📦 [${index + 1}/${targetDirectories.length}] Processing folder domain: ${modulePath}`);
+      console.log(`==================================================`);
+
+      const options = hasBusinessSpecs ? coverageOptions : discoveryOptions;
+      return processModuleWithRetries(modulePath, options);
+    };
+  });
+
+  let completed = 0;
+  while (tasks.length > 0) {
+    const batch = tasks.splice(0, CONCURRENCY_LIMIT);
+    const results = await Promise.allSettled(batch.map(task => task()));
+
+    results.forEach((result, index) => {
+      if (result.status === 'fulfilled') {
+        console.log(`${getCurrentTime()} ${result.value}`);
+      } else {
+        console.error(`${getCurrentTime()} ${result.reason.message}`);
+      }
+
+      completed++;
+      console.log(`[${getCurrentTime()}] 🚀 Progress: ${completed}/${targetDirectories.length} modules processed`);
+    });
+  }
+}
+
+// Determine mode based on BUSINESS_LOGIC.md existence
+const hasBusinessSpecs = fs.existsSync(businessLogicFile);
+if (!hasBusinessSpecs) {
+  console.log('📝 [MODE: DISCOVERY] BUSINESS_LOGIC.md not found.');
+  console.log('🤖 Target Model: deepseek-r1-gpu -> Analyzing behavior & rendering diagrams...');
+} else {
+  console.log('🧪 [MODE: COVERAGE] BUSINESS_LOGIC.md found!');
+  console.log('🤖 Target Model: qwen2.5-coder-14b-gpu -> Generating tests to hit 100% coverage...');
+}
+
+console.log(`[${getCurrentTime()}] Starting parallel processing with concurrency limit: ${CONCURRENCY_LIMIT}`);
+processQueue();
 
 console.log('\n🎉 [Local AI Pipeline Engine] Execution loop successfully finished processing!');
 if (!hasBusinessSpecs) {
