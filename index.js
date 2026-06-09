@@ -29,8 +29,8 @@ const VALID_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.jsx']);
 
 // Configure model options based on available Ollama models
 const discoveryOptions = {
-  model: process.env.DISCOVERY_MODEL || 'ollama_chat/deepseek-r1-gpu',
-  editorModel: process.env.DISCOVERY_EDITOR_MODEL || 'ollama_chat/deepseek-r1-gpu'
+  model: process.env.DISCOVERY_MODEL || 'ollama_chat/qwen2.5-coder-14b-gpu',
+  editorModel: process.env.DISCOVERY_EDITOR_MODEL || 'ollama_chat/qwen2.5-coder-14b-gpu'
 };
 
 const coverageOptions = {
@@ -42,101 +42,63 @@ const coverageOptions = {
 };
 
 // Global settings for parallel processing and error handling
-const CONCURRENCY_LIMIT = process.env.CONCURRENCY_LIMIT ? parseInt(process.env.CONCURRENCY_LIMIT) : 5;
+const CONCURRENCY_LIMIT = process.env.CONCURRENCY_LIMIT ? parseInt(process.env.CONCURRENCY_LIMIT) : 15;
 
 /**
  * Recursively inspects the repository to find source code directories.
  */
 function scanForSourceDirectories(dir, dirList = new Set()) {
   const files = fs.readdirSync(dir);
-  let containsSourceFiles = false;
-  const subDirs = [];
-
   for (const file of files) {
-    const fullPath = path.join(dir, file);
-    if (BLACKLIST.has(file)) continue;
-
-    const stat = fs.statSync(fullPath);
-    if (stat.isDirectory()) {
-      subDirs.push(fullPath);
-    } else if (stat.isFile()) {
-      const ext = path.extname(file).toLowerCase();
-      if (VALID_EXTENSIONS.has(ext)) {
-        containsSourceFiles = true;
-      }
+    const filePath = path.join(dir, file);
+    if (fs.statSync(filePath).isDirectory() && !BLACKLIST.has(file)) {
+      dirList.add(filePath.replace(projectRootDir + '\\', ''));
+      scanForSourceDirectories(filePath, dirList);
     }
   }
-
-  const relativePath = path.relative(projectRootDir, dir);
-  if (containsSourceFiles && relativePath !== "") {
-    dirList.add(relativePath);
-  }
-
-  for (const subDir of subDirs) {
-    scanForSourceDirectories(subDir, dirList);
-  }
-
   return Array.from(dirList);
 }
 
-// Set Ollama API endpoint
-process.env.OLLAMA_API_BASE = 'http://192.168.1.23:11434';
-
-console.log('🔍 Indexing project structural layout map trees...');
-const targetDirectories = scanForSourceDirectories(projectRootDir);
-
-if (targetDirectories.length === 0) {
-  console.log('❌ No valid source code folders discovered. Exiting.');
-  process.exit(0);
-}
-
-// Initialize logging with timestamp
-function getCurrentTime() {
-  return new Date().toLocaleTimeString();
-}
-
-console.log(`[${getCurrentTime()}] 🚀 Processing sequence initialized for ${targetDirectories.length} detected modules:`);
-
 /**
- * Processes a module asynchronously with retries.
+ * Main execution logic
  */
-async function processModuleWithRetries(modulePath, options, retries = 3) {
-  try {
-    const command = `aider 
-      --model ${options.model}
-      --editor-model ${options.editorModel}
-      --file "${modulePath}"
-      --message-file "${options.messageFile}"
-      ${options.testCmd ? `--test-cmd "${options.testCmd}"` : ''}
-      ${options.readFiles?.map(f => `--read ${f}`).join(' ') || ''}
-      --auto-test
-      --yes-always
-      --auto-accept-architect
-      --stream`;
-
-    execSync(command, { cwd: projectRootDir, stdio: 'inherit' });
-    return `✅ Completed processing for module block: ${modulePath}`;
-  } catch (error) {
-    if (retries > 0 && error.message.includes('transient')) {
-      console.log(`[${getCurrentTime()}] 🔄 Retrying ${modulePath}... Remaining attempts: ${retries}`);
-      return processModuleWithRetries(modulePath, options, retries - 1);
-    }
-    throw new Error(`❌ Error processing "${modulePath}": ${error.message}`);
+async function main() {
+  const directories = scanForSourceDirectories(projectRootDir);
+  if (directories.length === 0) {
+    console.log('🛑 No valid directories found to process.');
+    return;
   }
+
+  // Determine mode based on BUSINESS_LOGIC.md existence
+  const hasBusinessSpecs = fs.existsSync(businessLogicFile);
+  
+  // Set up processing options
+  const processingOptions = hasBusinessSpecs ? coverageOptions : discoveryOptions;
+
+  console.log(`[${new Date().toLocaleTimeString()}] 🚀 Processing sequence initialized for ${directories.length} detected modules:`);
+  if (hasBusinessSpecs) {
+    console.log('🧪 [MODE: COVERAGE] BUSINESS_LOGIC.md found!');
+    console.log(`🤖 Target Model: ${processingOptions.model} -> Generating tests to hit 100% coverage...`);
+  } else {
+    console.log('📝 [MODE: DISCOVERY] BUSINESS_LOGIC.md not found.');
+    console.log('🤖 Target Model: ${processingOptions.model} -> Analyzing behavior & rendering diagrams...');
+  }
+
+  // Process in parallel
+  await processQueue(directories, processingOptions);
 }
 
 /**
  * Processes modules in parallel with concurrency control.
  */
-async function processQueue() {
-  const tasks = targetDirectories.map((modulePath, index) => {
+async function processQueue(directories, options) {
+  const tasks = directories.map((modulePath, index) => {
     return () => {
       console.log(`\n==================================================`);
-      console.log(`[${getCurrentTime()}] 📦 [${index + 1}/${targetDirectories.length}] Processing folder domain: ${modulePath}`);
+      console.log(`[${new Date().toLocaleTimeString()}] 📦 [${index + 1}/${directories.length}] Processing folder domain: ${modulePath}`);
       console.log(`==================================================`);
 
-      const options = hasBusinessSpecs ? coverageOptions : discoveryOptions;
-      return processModuleWithRetries(modulePath, options);
+      return processModule(modulePath, options);
     };
   });
 
@@ -147,32 +109,31 @@ async function processQueue() {
 
     results.forEach((result, index) => {
       if (result.status === 'fulfilled') {
-        console.log(`${getCurrentTime()} ${result.value}`);
+        console.log(`${new Date().toLocaleTimeString()} ${result.value}`);
       } else {
-        console.error(`${getCurrentTime()} ${result.reason.message}`);
+        console.error(`${new Date().toLocaleTimeString()} Error processing module: ${result.reason.message}`);
       }
 
       completed++;
-      console.log(`[${getCurrentTime()}] 🚀 Progress: ${completed}/${targetDirectories.length} modules processed`);
+      console.log(`[${new Date().toLocaleTimeString()}] 🚀 Progress: ${completed}/${directories.length} modules processed`);
     });
   }
 }
 
-// Determine mode based on BUSINESS_LOGIC.md existence
-const hasBusinessSpecs = fs.existsSync(businessLogicFile);
-if (!hasBusinessSpecs) {
-  console.log('📝 [MODE: DISCOVERY] BUSINESS_LOGIC.md not found.');
-  console.log('🤖 Target Model: deepseek-r1-gpu -> Analyzing behavior & rendering diagrams...');
-} else {
-  console.log('🧪 [MODE: COVERAGE] BUSINESS_LOGIC.md found!');
-  console.log('🤖 Target Model: qwen2.5-coder-14b-gpu -> Generating tests to hit 100% coverage...');
+/**
+ * Processes a single module
+ */
+async function processModule(modulePath, options) {
+  try {
+    const command = `node ${path.join(__dirname, 'index.js')} --process-module '${modulePath}'`;
+    execSync(command, { stdio: 'inherit' });
+    return `[${new Date().toLocaleTimeString()}] ✅ Successfully processed: ${modulePath}`;
+  } catch (error) {
+    throw new Error(`Error processing module ${modulePath}: ${error.message}`);
+  }
 }
 
-console.log(`[${getCurrentTime()}] Starting parallel processing with concurrency limit: ${CONCURRENCY_LIMIT}`);
-processQueue();
+// Main execution
+main();
 
 console.log('\n🎉 [Local AI Pipeline Engine] Execution loop successfully finished processing!');
-if (!hasBusinessSpecs) {
-  console.log('👉 Next Step: Review your brand new BUSINESS_LOGIC.md file.');
-  console.log('   Once satisfied, run this command again to trigger 100% test coverage generation via Qwen!');
-}
