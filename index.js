@@ -15,7 +15,7 @@ const execPromise = util.promisify(exec);
 // 🎛️ HARDWARE & PIPELINE CONFIGURATION
 // ==========================================
 const OLLAMA_SERVER_URL = process.env.OLLAMA_API_BASE || 'http://192.168.1.23:11434';
-const CONCURRENCY_LIMIT = 2; // Match with OLLAMA_NUM_PARALLEL
+const CONCURRENCY_LIMIT = 1; // Match with OLLAMA_NUM_PARALLEL
 
 const MODEL_DISCOVERY  = 'ollama_chat/deepseek-r1:32b'; 
 const MODEL_COVERAGE   = 'ollama_chat/qwen2.5-coder:32b';
