@@ -2,51 +2,66 @@
 
 /**
  * Local AI Codebase Discoverer & Test Coverage Automator
- * Powered by local Ollama engine setups using Aider.
+ * Optimized for 3x P100 hardware clusters with automatic CPU-offload self-healing.
  */
 
-const { execSync } = require('child_process');
+const { exec } = require('child_process');
 const path = require('path');
 const fs = require('fs');
+const util = require('util');
+const execPromise = util.promisify(exec);
+
+// ==========================================
+// 🎛️ HARDWARE & PIPELINE CONFIGURATION
+// ==========================================
+const OLLAMA_SERVER_URL = process.env.OLLAMA_API_BASE || 'http://192.168.1.23:11434';
+const CONCURRENCY_LIMIT = 2; // Match with OLLAMA_NUM_PARALLEL
+
+const MODEL_DISCOVERY  = 'ollama_chat/deepseek-r1:32b'; 
+const MODEL_COVERAGE   = 'ollama_chat/qwen2.5-coder:32b';
+// ==========================================
 
 const projectRootDir = process.cwd(); 
-// The master specification file that tracks business requirements and diagrams
 const businessLogicFile = path.join(projectRootDir, 'BUSINESS_LOGIC.md');
-
-// 🛠️ Dynamic Mode Auto-Detection
 const hasBusinessSpecs = fs.existsSync(businessLogicFile);
 
 const discoveryPrompt = path.join(__dirname, 'prompt-discovery.txt');
 const coveragePrompt = path.join(__dirname, 'prompt-coverage.txt');
 
-if (!hasBusinessSpecs) {
-  console.log('📝 [MODE: DISCOVERY] BUSINESS_LOGIC.md not found.');
-  console.log('🤖 Target Model: deepseek-r1:32b -> Analyzing behavior & rendering diagrams...\n');
-} else {
-  console.log('🧪 [MODE: COVERAGE] BUSINESS_LOGIC.md found!');
-  console.log('🤖 Target Model: qwen2.5-coder:32b -> Generating tests to hit 100% coverage...\n');
-}
-
-// Global directories to explicitly ignore during the file scanner sequence
-const BLACKLIST = new Set([
-  'node_modules',
-  '.next',
-  '.git',
-  'out',
-  'build',
-  'public',
-  'coverage',
-  '.github',
-  'dist'
-]);
-
-// Source extensions we want to map context from
+const BLACKLIST = new Set(['node_modules', '.next', '.git', 'out', 'build', 'public', 'coverage', '.github', 'dist']);
 const VALID_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.jsx']);
 
+process.env.OLLAMA_API_BASE = OLLAMA_SERVER_URL;
+
 /**
- * Recursively inspects the host repository tree to pinpoint 
- * deep leaf directories actively containing source code elements.
+ * Self-healing Hook: Automatically checks for CPU leakage and repairs the environment.
  */
+async function ensurePureGpuExecution() {
+  try {
+    // 1. Ask Ollama for its current active processing matrix
+    const { stdout } = await execPromise('ollama ps');
+    
+    // Check if a model is running and if the processor string contains "CPU" (e.g., "13%/87% CPU/GPU")
+    if (stdout.includes('CPU')) {
+      console.warn('\n⚠️ [Automated Guard] Detected model spilling into CPU RAM! Initiating hot repair...');
+      
+      // Execute driver and service recycle sequence silently
+      await execPromise('sudo systemctl stop ollama');
+      await execPromise('sudo rmmod nvidia_uvm && sudo modprobe nvidia_uvm');
+      await execPromise('sudo systemctl daemon-reload && sudo systemctl start ollama');
+      
+      // Give the background service 3 seconds to re-bind to the PCIe channels
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      console.log('✨ [Automated Guard] Driver refreshed. Ollama successfully forced back to pure VRAM.\n');
+    }
+  } catch (err) {
+    // If ollama ps fails because the service is offline, kickstart it
+    try {
+      await execPromise('sudo systemctl start ollama');
+    } catch (_) {}
+  }
+}
+
 function scanForSourceDirectories(dir, dirList = new Set()) {
   const files = fs.readdirSync(dir);
   let containsSourceFiles = false;
@@ -67,7 +82,6 @@ function scanForSourceDirectories(dir, dirList = new Set()) {
     }
   }
 
-  // Only append paths that are actual child directories, skipping the blank root string
   const relativePath = path.relative(projectRootDir, dir);
   if (containsSourceFiles && relativePath !== "") {
     dirList.add(relativePath);
@@ -80,47 +94,54 @@ function scanForSourceDirectories(dir, dirList = new Set()) {
   return Array.from(dirList);
 }
 
-// 🌐 EXPLICIT NETWORK ROUTING: Forces Node and Aider to talk directly to your server machine
-process.env.OLLAMA_API_BASE = 'http://192.168.1.23:11434';
-
-console.log('🔍 Indexing project structural layout map trees...');
-const targetDirectories = scanForSourceDirectories(projectRootDir);
-
-if (targetDirectories.length === 0) {
-  console.log('❌ No valid source code folders discovered. Exiting.');
-  process.exit(0);
-}
-
-console.log(`🚀 Processing sequence initialized for ${targetDirectories.length} detected modules:`);
-targetDirectories.forEach(d => console.log(`  - ${d}`));
-
-// Run the sequential agent loop processing sequence across target blocks
-targetDirectories.forEach((modulePath, index) => {
-  console.log(`\n==================================================`);
-  console.log(`📦 [${index + 1}/${targetDirectories.length}] Processing folder domain: ${modulePath}`);
-  console.log(`==================================================`);
-
-  let command = '';
-
+async function main() {
   if (!hasBusinessSpecs) {
-    // 🧠 DISCOVERY PHASE: Uses --yes-always to completely bypass user approval prompts
-    command = `aider --model ollama_chat/deepseek-r1:32b --editor-model ollama_chat/deepseek-r1:32b --file "${modulePath}" --message-file "${discoveryPrompt}" --yes-always --auto-accept-architect --no-stream`;
+    console.log('📝 [MODE: DISCOVERY] BUSINESS_LOGIC.md not found.');
   } else {
-    // 💻 COVERAGE PHASE: Standardizes flags across test runner execution phases
-    command = `aider --model ollama_chat/qwen2.5-coder:32b --editor-model ollama_chat/qwen2.5-coder:32b --read BUSINESS_LOGIC.md --file "${modulePath}" --message-file "${coveragePrompt}" --test-cmd "npm run test:coverage" --auto-test --yes-always --auto-accept-architect --no-stream`;
+    console.log('🧪 [MODE: COVERAGE] BUSINESS_LOGIC.md found!');
   }
 
-  try {
-    // Execute command synchronously and pipe standard I/O into your active terminal window
-    execSync(command, { cwd: projectRootDir, stdio: 'inherit' });
-    console.log(`\n✅ Section complete for module block: ${modulePath}`);
-  } catch (error) {
-    console.error(`❌ Interrupted processing context exception on folder "${modulePath}":`, error.message);
+  const targetDirectories = scanForSourceDirectories(projectRootDir);
+  if (targetDirectories.length === 0) {
+    console.log('❌ No valid source code folders discovered. Exiting.');
+    process.exit(0);
   }
-});
 
-console.log('\n🎉 [Local AI Pipeline Engine] Execution loop successfully finished processing!');
-if (!hasBusinessSpecs) {
-  console.log('👉 Next Step: Review your brand new BUSINESS_LOGIC.md file.');
-  console.log('   Once satisfied, run this command again to trigger 100% test coverage generation via Qwen!');
+  let currentIdx = 0;
+
+  async function worker() {
+    while (currentIdx < targetDirectories.length) {
+      const index = currentIdx++;
+      const modulePath = targetDirectories[index];
+      const taskDisplayNum = index + 1;
+
+      // Run hardware structural diagnostic before letting Aider request context
+      await ensurePureGpuExecution();
+
+      console.log(`🛫 [${taskDisplayNum}/${targetDirectories.length}] Processing domain: ${modulePath}`);
+
+      let command = '';
+      if (!hasBusinessSpecs) {
+        command = `aider --model ${MODEL_DISCOVERY} --editor-model ${MODEL_DISCOVERY} --file "${modulePath}" --message-file "${discoveryPrompt}" --yes-always --auto-accept-architect --no-stream`;
+      } else {
+        command = `aider --model ${MODEL_COVERAGE} --editor-model ${MODEL_COVERAGE} --read BUSINESS_LOGIC.md --file "${modulePath}" --message-file "${coveragePrompt}" --test-cmd "npm run test:coverage" --auto-test --yes-always --auto-accept-architect --no-stream`;
+      }
+
+      try {
+        const { stdout } = await execPromise(command, { cwd: projectRootDir });
+        console.log(`✅ [${taskDisplayNum}/${targetDirectories.length}] Completed module block: ${modulePath}\n${stdout}`);
+      } catch (error) {
+        console.error(`❌ [${taskDisplayNum}/${targetDirectories.length}] Interrupted context on folder "${modulePath}":\n`, error.stdout || error.message);
+      }
+    }
+  }
+
+  const workerPool = Array(Math.min(CONCURRENCY_LIMIT, targetDirectories.length))
+    .fill(null)
+    .map(() => worker());
+
+  await Promise.all(workerPool);
+  console.log('\n🎉 [Local AI Pipeline Engine] Execution loop successfully finished processing!');
 }
+
+main().catch(err => console.error("Pipeline crashed unexpectedly:", err));
