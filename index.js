@@ -5,7 +5,7 @@
  * Optimized for 3x P100 hardware clusters with automatic CPU-offload self-healing.
  */
 
-const { exec } = require('child_process');
+const { exec, spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const util = require('util');
@@ -38,10 +38,10 @@ process.env.OLLAMA_API_BASE = OLLAMA_SERVER_URL;
  */
 async function ensurePureGpuExecution() {
   try {
-    // 1. Ask Ollama for its current active processing matrix
+    // Ask Ollama for its current active processing matrix
     const { stdout } = await execPromise('ollama ps');
     
-    // Check if a model is running and if the processor string contains "CPU" (e.g., "13%/87% CPU/GPU")
+    // Check if a model is running and if the processor string contains "CPU"
     if (stdout.includes('CPU')) {
       console.warn('\n⚠️ [Automated Guard] Detected model spilling into CPU RAM! Initiating hot repair...');
       
@@ -118,20 +118,62 @@ async function main() {
       // Run hardware structural diagnostic before letting Aider request context
       await ensurePureGpuExecution();
 
-      console.log(`🛫 [${taskDisplayNum}/${targetDirectories.length}] Processing domain: ${modulePath}`);
+      console.log(`\n🛫 [${taskDisplayNum}/${targetDirectories.length}] Processing domain: ${modulePath}`);
+      console.log(`--------------------------------------------------`);
 
-      let command = '';
+      // Construct safe arguments array for spawn execution
+      let args = [];
+
       if (!hasBusinessSpecs) {
-        command = `aider --model ${MODEL_DISCOVERY} --editor-model ${MODEL_DISCOVERY} --file "${modulePath}" --message-file "${discoveryPrompt}" --yes-always --auto-accept-architect --no-stream`;
+        args = [
+          '--model', MODEL_DISCOVERY,
+          '--editor-model', MODEL_DISCOVERY,
+          '--file', modulePath,
+          '--message-file', discoveryPrompt,
+          '--yes-always',
+          '--auto-accept-architect',
+          '--no-stream'
+        ];
       } else {
-        command = `aider --model ${MODEL_COVERAGE} --editor-model ${MODEL_COVERAGE} --read BUSINESS_LOGIC.md --file "${modulePath}" --message-file "${coveragePrompt}" --test-cmd "npm run test:coverage" --auto-test --yes-always --auto-accept-architect --no-stream`;
+        args = [
+          '--model', MODEL_COVERAGE,
+          '--editor-model', MODEL_COVERAGE,
+          '--read', 'BUSINESS_LOGIC.md',
+          '--file', modulePath,
+          '--message-file', coveragePrompt,
+          // OPTIMIZATION TIP: Narrowing down your test framework suite helps performance. 
+          // If your test suite supports specific paths, alter this line to target the specific folder.
+          '--test-cmd', 'npm run test:coverage', 
+          '--auto-test',
+          '--yes-always',
+          '--auto-accept-architect',
+          '--no-stream'
+        ];
       }
 
       try {
-        const { stdout } = await execPromise(command, { cwd: projectRootDir });
-        console.log(`✅ [${taskDisplayNum}/${targetDirectories.length}] Completed module block: ${modulePath}\n${stdout}`);
+        // Execute through spawn using system standard I/O streams directly
+        await new Promise((resolve, reject) => {
+          const child = spawn('aider', args, { 
+            cwd: projectRootDir, 
+            stdio: 'inherit', // Directly streams stdout/stderr to your main terminal
+            shell: true       // Resolves any local environment path binding issues
+          });
+
+          child.on('close', (code) => {
+            if (code === 0) {
+              resolve();
+            } else {
+              reject(new Error(`Aider tool exited with failure code: ${code}`));
+            }
+          });
+
+          child.on('error', (err) => reject(err));
+        });
+
+        console.log(`\n✅ [${taskDisplayNum}/${targetDirectories.length}] Completed module block: ${modulePath}\n`);
       } catch (error) {
-        console.error(`❌ [${taskDisplayNum}/${targetDirectories.length}] Interrupted context on folder "${modulePath}":\n`, error.stdout || error.message);
+        console.error(`\n❌ [${taskDisplayNum}/${targetDirectories.length}] Interrupted context on folder "${modulePath}":\n`, error.message);
       }
     }
   }
