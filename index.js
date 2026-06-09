@@ -38,24 +38,16 @@ process.env.OLLAMA_API_BASE = OLLAMA_SERVER_URL;
  */
 async function ensurePureGpuExecution() {
   try {
-    // Ask Ollama for its current active processing matrix
     const { stdout } = await execPromise('ollama ps');
-    
-    // Check if a model is running and if the processor string contains "CPU"
     if (stdout.includes('CPU')) {
       console.warn('\n⚠️ [Automated Guard] Detected model spilling into CPU RAM! Initiating hot repair...');
-      
-      // Execute driver and service recycle sequence silently
       await execPromise('sudo systemctl stop ollama');
       await execPromise('sudo rmmod nvidia_uvm && sudo modprobe nvidia_uvm');
       await execPromise('sudo systemctl daemon-reload && sudo systemctl start ollama');
-      
-      // Give the background service 3 seconds to re-bind to the PCIe channels
       await new Promise(resolve => setTimeout(resolve, 3000));
       console.log('✨ [Automated Guard] Driver refreshed. Ollama successfully forced back to pure VRAM.\n');
     }
   } catch (err) {
-    // If ollama ps fails because the service is offline, kickstart it
     try {
       await execPromise('sudo systemctl start ollama');
     } catch (_) {}
@@ -112,23 +104,54 @@ async function main() {
   async function worker() {
     while (currentIdx < targetDirectories.length) {
       const index = currentIdx++;
+      if (index >= targetDirectories.length) break;
+      
       const modulePath = targetDirectories[index];
       const taskDisplayNum = index + 1;
+
+      // Extract all source files located directly inside this domain folder
+      const absoluteModulePath = path.join(projectRootDir, modulePath);
+      let folderFiles = [];
+      try {
+        folderFiles = fs.readdirSync(absoluteModulePath);
+      } catch (e) {
+        console.error(`⚠️ Could not read directory ${modulePath}: ${e.message}`);
+        continue;
+      }
+
+      const fileArgs = [];
+      for (const file of folderFiles) {
+        const fullFilePath = path.join(absoluteModulePath, file);
+        try {
+          if (fs.statSync(fullFilePath).isFile()) {
+            const ext = path.extname(file).toLowerCase();
+            if (VALID_EXTENSIONS.has(ext)) {
+              const relativeFilePath = path.relative(projectRootDir, fullFilePath);
+              fileArgs.push('--file', relativeFilePath);
+            }
+          }
+        } catch (_) {}
+      }
+
+      // Safe skip if a directory lists files but they match no valid extension parameters
+      if (fileArgs.length === 0) {
+        console.log(`ℹ️ [${taskDisplayNum}/${targetDirectories.length}] Skipping folder "${modulePath}": No matching source files directly inside.`);
+        continue;
+      }
 
       // Run hardware structural diagnostic before letting Aider request context
       await ensurePureGpuExecution();
 
       console.log(`\n🛫 [${taskDisplayNum}/${targetDirectories.length}] Processing domain: ${modulePath}`);
+      console.log(`📋 Found ${fileArgs.length / 2} targeting file(s) for editing context.`);
       console.log(`--------------------------------------------------`);
 
-      // Construct safe arguments array for spawn execution
       let args = [];
-
       if (!hasBusinessSpecs) {
         args = [
           '--model', MODEL_DISCOVERY,
           '--editor-model', MODEL_DISCOVERY,
-          '--file', modulePath,
+          ...fileArgs, // Expand out every separate file mapping argument dynamically
           '--message-file', discoveryPrompt,
           '--yes-always',
           '--auto-accept-architect',
@@ -139,10 +162,8 @@ async function main() {
           '--model', MODEL_COVERAGE,
           '--editor-model', MODEL_COVERAGE,
           '--read', 'BUSINESS_LOGIC.md',
-          '--file', modulePath,
+          ...fileArgs, // Expand out every separate file mapping argument dynamically
           '--message-file', coveragePrompt,
-          // OPTIMIZATION TIP: Narrowing down your test framework suite helps performance. 
-          // If your test suite supports specific paths, alter this line to target the specific folder.
           '--test-cmd', 'npm run test:coverage', 
           '--auto-test',
           '--yes-always',
@@ -152,12 +173,11 @@ async function main() {
       }
 
       try {
-        // Execute through spawn using system standard I/O streams directly
         await new Promise((resolve, reject) => {
           const child = spawn('aider', args, { 
             cwd: projectRootDir, 
-            stdio: 'inherit', // Directly streams stdout/stderr to your main terminal
-            shell: true       // Resolves any local environment path binding issues
+            stdio: 'inherit', // Directly streams stdout/stderr to your terminal
+            shell: true       // Resolves Windows shell alias mapping safely
           });
 
           child.on('close', (code) => {
